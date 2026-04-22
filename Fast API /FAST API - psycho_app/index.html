@@ -1,0 +1,204 @@
+<!doctype html>
+<html>
+<head>
+  <title>Psychological Profiling</title>
+  <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+body {
+  font-family: Lato, sans-serif;
+  max-width: 800px;
+  margin: 40px auto;
+  padding: 0 20px;
+  background: #fce4ec;
+}
+h1 { color: #880e4f; }
+h2, h3, h4 { color: #ad1457; }
+button {
+  background: #c2185b;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  margin: 5px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+}
+button:hover { background: #880e4f; }
+#mydiv1 {
+  margin-top: 30px;
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.profile-section { margin-bottom: 20px; }
+.trait-bar {
+  background: #f8bbd0;
+  border-radius: 4px;
+  height: 20px;
+  margin: 5px 0;
+}
+.trait-fill {
+  background: #c2185b;
+  height: 20px;
+  border-radius: 4px;
+}
+.movie-card {
+  display: inline-block;
+  width: 150px;
+  margin: 10px;
+  vertical-align: top;
+  text-align: center;
+}
+.movie-card img { width: 100%; border-radius: 4px; }
+.pet-img { width: 200px; border-radius: 8px; margin: 10px; }
+  </style>
+</head>
+
+<body>
+  <h1>Psychological Profiling</h1>
+  <p>Welcome to your Psychological Profile!</p>
+
+  <p>
+    <button onclick="fetch_form()">Fetch Form</button>
+    <button onclick="submit_form()">Submit Form</button>
+    <button onclick="analyze()">Analyse</button>
+    <button onclick="view_input()">View Input Data</button>
+    <button onclick="view_profile()">View Profile</button>
+  </p>
+
+  <div id="mydiv1"></div>
+
+  <script>
+    const div = document.getElementById("mydiv1");
+
+    // fetch the form from the server and inject it into the page
+    async function fetch_form() {
+      const resp = await fetch("/form");
+      const html = await resp.text();
+      div.innerHTML = html;
+    }
+
+    // grab all the form data and post it to /submit
+    async function submit_form() {
+      const form = document.forms["psychoform"];
+      if (!form) {
+        div.innerHTML = "<p>Please click Fetch Form first</p>";
+        return;
+      }
+
+      const data = new FormData();
+
+      // basic fields
+      data.append("name", form.name.value);
+      data.append("gender", form.gender.value);
+      data.append("birthyear", form.birthyear.value);
+      data.append("birthplace", form.birthplace.value);
+      data.append("residence", form.residence.value);
+      data.append("job", form.job.value);
+      data.append("message", form.message.value);
+
+      // questions 1-20
+      for (let i = 1; i <= 20; i++) {
+        data.append(`question${i}`, form[`question${i}`].value);
+      }
+
+      // checkboxes - pets (can be multiple)
+      const petBoxes = form.querySelectorAll("input[name='pets']:checked");
+      petBoxes.forEach(box => data.append("pets", box.value));
+
+      const resp = await fetch("/submit", { method: "POST", body: data });
+      const result = await resp.json();
+      div.innerHTML = `<p>${result.message}</p>`;
+    }
+
+    // tell the server to run the analysis
+    async function analyze() {
+      div.innerHTML = "<p>Analysing... please wait</p>";
+      const resp = await fetch("/analyze");
+      const result = await resp.json();
+      div.innerHTML = `<p>${result.message || "Analysis complete"}</p>`;
+    }
+
+    // fetch and display the raw input data
+    async function view_input() {
+      const resp = await fetch("/view/input");
+      const data = await resp.json();
+
+      if (data.message) {
+        div.innerHTML = `<p>${data.message}</p>`;
+        return;
+      }
+
+      div.innerHTML = `
+        <div class="profile-section">
+          <h2>Your Input Data</h2>
+          <p><b>Name:</b> ${data.name}</p>
+          <p><b>Gender:</b> ${data.gender}</p>
+          <p><b>Birth Year:</b> ${data.birthyear}</p>
+          <p><b>Birth Place:</b> ${data.birthplace}</p>
+          <p><b>Residence:</b> ${data.residence}</p>
+          <p><b>Job Preference:</b> ${data.job}</p>
+          <p><b>Pets:</b> ${data.pets.join(", ") || "none"}</p>
+          <p><b>Message:</b> ${data.message}</p>
+          <h3>Question Responses</h3>
+          ${Object.entries(data.questions).map(([k, v]) => `<p>${k}: ${v}/5</p>`).join("")}
+        </div>
+      `;
+    }
+
+    // fetch and display the full psychological profile
+    async function view_profile() {
+      const resp = await fetch("/view/profile");
+      const data = await resp.json();
+
+      if (data.message) {
+        div.innerHTML = `<p>${data.message}</p>`;
+        return;
+      }
+
+      const p = data.profile;
+      const traits = p.traits;
+
+      // build trait bars
+      const traitHTML = Object.entries(traits).map(([trait, score]) => `
+        <p><b>${trait.charAt(0).toUpperCase() + trait.slice(1)}</b> (${score}/5)</p>
+        <div class="trait-bar">
+          <div class="trait-fill" style="width: ${(score/5)*100}%"></div>
+        </div>
+      `).join("");
+
+      // build movie cards
+      const movieHTML = p.movies.map(m => `
+        <div class="movie-card">
+          <img src="${m.poster}" alt="${m.title}" onerror="this.style.display='none'">
+          <p><b>${m.title}</b> (${m.year})</p>
+          <p>⭐ ${m.imdbRating}</p>
+          <p style="font-size:12px">${m.plot}</p>
+        </div>
+      `).join("");
+
+      // build pet image section
+      const petHTML = Object.entries(data.pet_images).map(([pet, url]) => `
+        <div>
+          <h4>Your ${pet.charAt(0).toUpperCase() + pet.slice(1)}</h4>
+          <img class="pet-img" src="${url}" alt="${pet}">
+        </div>
+      `).join("");
+
+      div.innerHTML = `
+        <div class="profile-section">
+          <h2>Psychological Profile — ${p.name}</h2>
+          <h3>Personality Traits</h3>
+          ${traitHTML}
+          <h3>Career Assessment</h3>
+          <p>${p.career_assessment}</p>
+          <h3>Movies You Might Like</h3>
+          <div>${movieHTML}</div>
+          ${petHTML ? `<h3>Your Pets:</h3>${petHTML}` : ""}
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>
